@@ -52,6 +52,7 @@ const User = model("User", userSchema, "customer_users");
 
 /**
  * Shipment (paket per resi)
+ * OPTIMIZED: Removed per-resi token - using only lockerToken for access
  */
 const shipmentSchema = new Schema(
   {
@@ -67,9 +68,6 @@ const shipmentSchema = new Schema(
     courierId: { type: String },
     courierPlate: { type: String },
     courierName: { type: String },
-
-    // 🔹 token rahasia per shipment/resi (dipakai kurir + server + ESP32)
-    token: { type: String, unique: true, sparse: true },
 
     status: { type: String, default: "assigned_to_locker" },
     createdAt: { type: Date, default: Date.now },
@@ -98,13 +96,14 @@ const Shipment = model("Shipment", shipmentSchema, "shipments");
 /**
  * Locker (per kotak fisik)
  * Updated with courierHistory for one-time token tracking
+ * OPTIMIZED: Removed pendingShipments token pool - using simpler pendingResi
  */
 const lockerSchema = new Schema(
   {
     lockerId: { type: String, required: true, unique: true },
     lockerToken: { type: String, default: null },
 
-    // New: Track all couriers who delivered here
+    // Track all couriers who delivered here
     courierHistory: {
       type: [
         {
@@ -119,25 +118,8 @@ const lockerSchema = new Schema(
       default: [],
     },
 
-    // Lama: list resi (tetap dipertahankan untuk kompatibilitas)
+    // List of pending resi numbers for this locker
     pendingResi: { type: [String], default: [] },
-
-    // 🔹 Baru: pool resi + token per resi (dipakai skenario multi-kurir)
-    pendingShipments: {
-      type: [
-        {
-          resi: String,
-          customerId: String,
-          token: String,
-          status: {
-            type: String,
-            enum: ["pending", "used"],
-            default: "pending",
-          },
-        },
-      ],
-      default: [],
-    },
 
     command: { type: Schema.Types.Mixed, default: null },
 
@@ -222,16 +204,6 @@ function generateCustomerId() {
   return String(Math.floor(100000 + Math.random() * 900000)); // 100000 - 999999
 }
 
-// Helper: generate token unik per shipment
-function generateShipmentToken() {
-  const chars = "ABCDEFGHJKLMNPQRSTUVWXYZ23456789";
-  let out = "tok_";
-  for (let i = 0; i < 8; i++) {
-    out += chars[Math.floor(Math.random() * chars.length)];
-  }
-  return out;
-}
-
 // Helper: dapat locker dari Mongo, auto-create jika belum ada
 async function getLocker(lockerId) {
   let locker = await Locker.findOne({ lockerId });
@@ -240,7 +212,6 @@ async function getLocker(lockerId) {
       lockerId,
       lockerToken: randomToken(`LK-${lockerId}`),
       pendingResi: [],
-      pendingShipments: [],
       courierHistory: [],
       command: null,
       isActive: true,
@@ -417,13 +388,7 @@ app.post("/api/shipments", async (req, res) => {
       let sh = await Shipment.findOne({ resi: normalizedResi });
 
       if (sh) {
-        // Kalau shipment lama BELUM ada token, generate sekarang
-        if (!sh.token) {
-          sh.token = generateShipmentToken();
-          await sh.save();
-        }
-
-        // Masukkan ke pendingResi (lama) kalau belum ada
+        // Masukkan ke pendingResi kalau belum ada
         if (
           !locker.pendingResi.includes(normalizedResi) &&
           sh.status !== "completed" &&
@@ -432,26 +397,11 @@ app.post("/api/shipments", async (req, res) => {
           locker.pendingResi.push(normalizedResi);
         }
 
-        // Masukkan ke pendingShipments (baru) kalau belum ada
-        const alreadyInPool = locker.pendingShipments.some(
-          (p) => p.resi === normalizedResi && p.token === sh.token
-        );
-        if (!alreadyInPool) {
-          locker.pendingShipments.push({
-            resi: normalizedResi,
-            customerId: sh.customerId || customerId || "",
-            token: sh.token,
-            status: "pending",
-          });
-        }
-
         createdShipments.push(sh);
         continue;
       }
 
-      // Shipment BARU
-      const shipmentToken = generateShipmentToken();
-
+      // Shipment BARU - simplified without per-resi token
       sh = await Shipment.create({
         resi: normalizedResi,
         courierType,
@@ -467,7 +417,6 @@ app.post("/api/shipments", async (req, res) => {
           ? courier.plate
           : "",
         courierName: courierName || "",
-        token: shipmentToken,
         status: "pending_locker",
         createdAt: new Date(),
         logs: [
@@ -486,13 +435,6 @@ app.post("/api/shipments", async (req, res) => {
       if (!locker.pendingResi.includes(normalizedResi)) {
         locker.pendingResi.push(normalizedResi);
       }
-
-      locker.pendingShipments.push({
-        resi: normalizedResi,
-        customerId: sh.customerId || customerId || "",
-        token: shipmentToken,
-        status: "pending",
-      });
     }
 
     await locker.save();
@@ -1018,8 +960,8 @@ app.post("/api/courier/deposit", async (req, res) => {
   }
 });
 
-// 🔹 Kurir: ambil daftar shipment + token (versi baru)
-app.get("/api/courier/tasks-token", async (req, res) => {
+// Kurir: ambil daftar shipment (simplified - no per-resi token)
+app.get("/api/courier/tasks", async (req, res) => {
   try {
     const { plate, courierId } = req.query;
 
@@ -1045,25 +987,24 @@ app.get("/api/courier/tasks-token", async (req, res) => {
         courierType: s.courierType,
         courierPlate: s.courierPlate,
         customerId: s.customerId,
-        token: s.token,
         status: s.status,
       })),
     });
   } catch (err) {
-    console.error("GET /api/courier/tasks-token error:", err);
+    console.error("GET /api/courier/tasks error:", err);
     return res.status(500).json({ error: "Internal server error" });
   }
 });
 
-// 🔹 Kurir deposit paket pakai shipmentToken + lockerToken (mode baru)
-// Modified to implement ONE-TIME TOKEN with courier history tracking
-app.post("/api/courier/deposit-token", async (req, res) => {
+// Kurir deposit paket - SIMPLIFIED: only needs lockerToken + resi
+// Implements ONE-TIME TOKEN with courier history tracking
+app.post("/api/courier/deposit-resi", async (req, res) => {
   try {
-    const { lockerId, lockerToken, shipmentToken, resi } = req.body;
+    const { lockerId, lockerToken, resi } = req.body;
 
-    if (!lockerId || !lockerToken || !shipmentToken || !resi) {
+    if (!lockerId || !lockerToken || !resi) {
       return res.status(400).json({
-        error: "lockerId, lockerToken, shipmentToken, dan resi wajib diisi",
+        error: "lockerId, lockerToken, dan resi wajib diisi",
       });
     }
 
@@ -1080,37 +1021,24 @@ app.post("/api/courier/deposit-token", async (req, res) => {
         .json({ error: "Invalid or expired token" });
     }
 
-    // Cari pending shipment di pool baru
-    const idx = locker.pendingShipments.findIndex(
-      (p) =>
-        p.resi === resi &&
-        p.token === shipmentToken &&
-        p.status === "pending"
-    );
-
-    if (idx === -1) {
+    // Check if resi is in pendingResi
+    if (!locker.pendingResi.includes(resi)) {
       return res.status(400).json({
-        error:
-          "Token atau resi tidak cocok dengan shipment pending di locker ini",
+        error: "Resi tidak terdaftar untuk locker ini",
       });
     }
 
-    const pending = locker.pendingShipments[idx];
-
-    // Update pendingShipments -> used
-    locker.pendingShipments[idx].status = "used";
-
-    // Update shipment utama
+    // Update shipment
     const shipment = await Shipment.findOne({
       resi,
-      token: shipmentToken,
       lockerId,
+      status: "pending_locker",
     });
 
     if (!shipment) {
       return res
         .status(404)
-        .json({ error: "Shipment utama tidak ditemukan" });
+        .json({ error: "Shipment tidak ditemukan" });
     }
 
     shipment.status = "delivered_to_locker";
@@ -1120,7 +1048,7 @@ app.post("/api/courier/deposit-token", async (req, res) => {
       lockerId,
       resi,
       timestamp: new Date(),
-      extra: { source: "courier_deposit_token" },
+      extra: { source: "courier_deposit_resi" },
     });
     await shipment.save();
 
@@ -1128,12 +1056,12 @@ app.post("/api/courier/deposit-token", async (req, res) => {
     locker.command = {
       type: "open",
       resi,
-      source: "courier_token",
+      source: "courier_resi",
       createdAt: new Date(),
-      customerId: pending.customerId,
+      customerId: shipment.customerId || "",
     };
 
-    // still keep pendingResi lama sebagai fallback
+    // Remove from pendingResi
     locker.pendingResi = locker.pendingResi.filter((r) => r !== resi);
 
     // ========== ONE-TIME TOKEN: Record courier history and rotate token ==========
@@ -1157,7 +1085,7 @@ app.post("/api/courier/deposit-token", async (req, res) => {
 
     console.log(`[TOKEN ROTATE] ${lockerId}: Token rotated successfully`);
 
-    // Optional: recalc courier state
+    // Recalc courier state
     if (shipment.courierId) {
       await recalcCourierState(shipment.courierId);
     }
@@ -1168,11 +1096,11 @@ app.post("/api/courier/deposit-token", async (req, res) => {
       data: {
         lockerId,
         resi,
-        customerId: pending.customerId,
+        customerId: shipment.customerId || "",
       },
     });
   } catch (err) {
-    console.error("POST /api/courier/deposit-token error:", err);
+    console.error("POST /api/courier/deposit-resi error:", err);
     return res.status(500).json({ error: "Internal server error" });
   }
 });

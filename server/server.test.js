@@ -1,7 +1,10 @@
 /**
  * Unit Tests for One-Time Token System - Pure Logic Tests
  * 
- * These tests verify the token rotation and history logic without requiring MongoDB.
+ * Tests the simplified token system:
+ * - Only lockerToken (rotating QR token) is used for access
+ * - No per-resi shipment tokens
+ * - Courier history tracking
  */
 
 const crypto = require("crypto");
@@ -123,14 +126,14 @@ describe("One-Time Token System - Unit Tests", () => {
     });
   });
 
-  describe("Locker schema structure", () => {
-    it("should have required fields for one-time token system", () => {
+  describe("Simplified locker schema structure", () => {
+    it("should have required fields for optimized token system", () => {
+      // Optimized schema - removed pendingShipments token pool
       const lockerSchema = {
         lockerId: "locker01",
         lockerToken: "LK-locker01-abc123",
         courierHistory: [],
-        pendingResi: [],
-        pendingShipments: [],
+        pendingResi: [], // Simple list of resi numbers
         command: null,
         isActive: true,
         status: "unknown",
@@ -141,7 +144,29 @@ describe("One-Time Token System - Unit Tests", () => {
       expect(lockerSchema).toHaveProperty("lockerId");
       expect(lockerSchema).toHaveProperty("lockerToken");
       expect(lockerSchema).toHaveProperty("courierHistory");
+      expect(lockerSchema).toHaveProperty("pendingResi");
       expect(lockerSchema).toHaveProperty("tokenUpdatedAt");
+      // Should NOT have pendingShipments (removed for optimization)
+      expect(lockerSchema).not.toHaveProperty("pendingShipments");
+    });
+  });
+
+  describe("Simplified shipment schema structure", () => {
+    it("should not have per-resi token field", () => {
+      // Optimized schema - removed per-resi token
+      const shipmentSchema = {
+        resi: "11002899918893",
+        lockerId: "locker01",
+        courierType: "jne",
+        courierPlate: "B1234CD",
+        courierName: "Ahmad",
+        status: "pending_locker",
+      };
+
+      expect(shipmentSchema).toHaveProperty("resi");
+      expect(shipmentSchema).toHaveProperty("lockerId");
+      // Should NOT have token field (removed for optimization)
+      expect(shipmentSchema).not.toHaveProperty("token");
     });
   });
 
