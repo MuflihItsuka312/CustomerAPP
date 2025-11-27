@@ -1,7 +1,9 @@
-import 'dart:convert';
+import 'dart:convert';  // ✅ For jsonDecode
 import 'package:flutter/material.dart';
 import '../services/api_client.dart';
+import 'register_page.dart';  // ✅ Import register page
 import 'home_page.dart';
+
 
 class LoginPage extends StatefulWidget {
   const LoginPage({super.key});
@@ -130,10 +132,22 @@ class _LoginPageState extends State<LoginPage> {
                           )
                         : const Text('Login'),
                   ),
+                  const SizedBox(height: 12),
+                  TextButton(
+                    onPressed: () {
+                      Navigator.push(
+                        context,
+                        MaterialPageRoute(
+                          builder: (_) => const RegisterPage(),
+                        ),
+                      );
+                    },
+                    child: const Text("Belum punya akun? Daftar di sini"),
+                  ),
                   const SizedBox(height: 8),
                   const Text(
                     'Untuk demo, kamu bisa buat user lewat MongoDB langsung\n'
-                    'atau nanti kita tambah endpoint register di Agent Panel.',
+                    'atau pakai halaman Register di aplikasi ini.',
                     textAlign: TextAlign.center,
                     style: TextStyle(fontSize: 12),
                   )

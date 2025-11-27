@@ -28,7 +28,7 @@ class _MainTabPageState extends State<MainTabPage> {
         onTap: (i) => setState(() => _index = i),
         items: const [
           BottomNavigationBarItem(
-            icon: Icon(Icons.lock_open_outlined),
+            icon: Icon(Icons. lock_open_outlined),
             label: 'Home',
           ),
           BottomNavigationBarItem(
@@ -54,11 +54,20 @@ class _HomePageState extends State<HomePage> {
   String? _message;
   String? _userName;
 
+  // Form controller for manual resi input
+  final _resiController = TextEditingController();
+
   @override
   void initState() {
     super.initState();
     _loadUser();
     _fetchShipments();
+  }
+
+  @override
+  void dispose() {
+    _resiController.dispose();
+    super.dispose();
   }
 
   Future<void> _loadUser() async {
@@ -75,8 +84,7 @@ class _HomePageState extends State<HomePage> {
     });
 
     try {
-      final resp =
-          await ApiClient.get('/api/customer/shipments', auth: true);
+      final resp = await ApiClient.get('/api/customer/shipments', auth: true);
 
       if (resp.statusCode == 200) {
         final data = jsonDecode(resp.body);
@@ -93,7 +101,7 @@ class _HomePageState extends State<HomePage> {
           });
         }
       } else if (resp.statusCode == 401) {
-        if (!mounted) return;
+        if (! mounted) return;
         await ApiClient.clearToken();
         Navigator.of(context).pushAndRemoveUntil(
           MaterialPageRoute(builder: (_) => const LoginPage()),
@@ -121,7 +129,7 @@ class _HomePageState extends State<HomePage> {
 
     setState(() => _loading = true);
     try {
-      final resp = await ApiClient.post(
+      final resp = await ApiClient. post(
         '/api/customer/open-locker',
         {
           'resi': resi,
@@ -130,11 +138,11 @@ class _HomePageState extends State<HomePage> {
         auth: true,
       );
 
-      final data = jsonDecode(resp.body);
+      final data = jsonDecode(resp. body);
 
-      if (resp.statusCode == 200) {
+      if (resp. statusCode == 200) {
         setState(() {
-          _message = data['message']?.toString() ??
+          _message = data['message']?. toString() ??
               'Permintaan buka loker dikirim.';
         });
       } else {
@@ -149,10 +157,126 @@ class _HomePageState extends State<HomePage> {
     }
   }
 
+  Future<void> _submitManualResi() async {
+    if (_resiController.text.isEmpty) {
+      ScaffoldMessenger.of(context).showSnackBar(
+        const SnackBar(content: Text('Nomor resi wajib diisi!')),
+      );
+      return;
+    }
+
+    setState(() => _loading = true);
+
+    try {
+      final resp = await ApiClient.post(
+        '/api/customer/manual-resi',
+        {
+          'resi': _resiController. text.trim(),
+        },
+        auth: true,
+      );
+
+      final data = jsonDecode(resp.body);
+
+      if (resp.statusCode == 200) {
+        if (! mounted) return;
+        ScaffoldMessenger.of(context). showSnackBar(
+          SnackBar(
+            content: Text(data['message'] ?? 'Resi berhasil disimpan!'),
+            backgroundColor: Colors.green,
+          ),
+        );
+        _resiController.clear();
+        Navigator.of(context).pop();
+      } else {
+        if (!mounted) return;
+        ScaffoldMessenger.of(context).showSnackBar(
+          SnackBar(
+            content: Text(data['error'] ?? 'Gagal menyimpan resi'),
+            backgroundColor: Colors.red,
+            duration: const Duration(seconds: 4),
+          ),
+        );
+      }
+    } catch (e) {
+      if (!mounted) return;
+      ScaffoldMessenger.of(context).showSnackBar(
+        const SnackBar(
+          content: Text('Error koneksi ke server'),
+          backgroundColor: Colors. red,
+        ),
+      );
+    } finally {
+      if (mounted) setState(() => _loading = false);
+    }
+  }
+
+  void _showManualResiForm() {
+    showModalBottomSheet(
+      context: context,
+      isScrollControlled: true,
+      shape: const RoundedRectangleBorder(
+        borderRadius: BorderRadius.vertical(top: Radius.circular(20)),
+      ),
+      builder: (context) => Padding(
+        padding: EdgeInsets.only(
+          left: 24,
+          right: 24,
+          top: 24,
+          bottom: MediaQuery.of(context).viewInsets.bottom + 24,
+        ),
+        child: Column(
+          mainAxisSize: MainAxisSize.min,
+          crossAxisAlignment: CrossAxisAlignment.start,
+          children: [
+            const Text(
+              'Input Resi Manual',
+              style: TextStyle(fontSize: 20, fontWeight: FontWeight.bold),
+            ),
+            const SizedBox(height: 16),
+            TextField(
+              controller: _resiController,
+              decoration: const InputDecoration(
+                labelText: 'Nomor Resi *',
+                border: OutlineInputBorder(),
+                hintText: 'Contoh: 11002899918893',
+              ),
+              keyboardType: TextInputType. text,
+            ),
+            const SizedBox(height: 24),
+            Row(
+              children: [
+                Expanded(
+                  child: OutlinedButton(
+                    onPressed: () => Navigator.of(context).pop(),
+                    child: const Text('Batal'),
+                  ),
+                ),
+                const SizedBox(width: 12),
+                Expanded(
+                  child: ElevatedButton(
+                    onPressed: _loading ? null : _submitManualResi,
+                    child: _loading
+                        ? const SizedBox(
+                            height: 20,
+                            width: 20,
+                            child: CircularProgressIndicator(strokeWidth: 2),
+                          )
+                        : const Text('Simpan'),
+                  ),
+                ),
+              ],
+            ),
+          ],
+        ),
+      ),
+    );
+  }
+
   Future<void> _logout() async {
     await ApiClient.clearToken();
-    if (!mounted) return;
-    Navigator.of(context).pushAndRemoveUntil(
+    if (! mounted) return;
+    Navigator. of(context).pushAndRemoveUntil(
       MaterialPageRoute(builder: (_) => const LoginPage()),
       (_) => false,
     );
@@ -166,6 +290,11 @@ class _HomePageState extends State<HomePage> {
       appBar: AppBar(
         title: const Text('Smart Locker – Home'),
         actions: [
+          IconButton(
+            icon: const Icon(Icons.add_circle_outline),
+            onPressed: _showManualResiForm,
+            tooltip: 'Input Resi Manual',
+          ),
           IconButton(
             icon: const Icon(Icons.refresh),
             onPressed: _loading ? null : _fetchShipments,
@@ -219,7 +348,7 @@ class _HomePageState extends State<HomePage> {
                         ),
                         boxShadow: const [
                           BoxShadow(
-                            color: Colors.black12,
+                            color: Colors. black12,
                             blurRadius: 16,
                             offset: Offset(0, 8),
                           ),
@@ -252,7 +381,7 @@ class _HomePageState extends State<HomePage> {
 class _ShipmentInfoCard extends StatelessWidget {
   final Map<String, dynamic> shipment;
 
-  const _ShipmentInfoCard({required this.shipment});
+  const _ShipmentInfoCard({required this. shipment});
 
   @override
   Widget build(BuildContext context) {
@@ -290,7 +419,7 @@ class _ShipmentInfoCard extends StatelessWidget {
           const Text(': '),
           Expanded(
             child: Text(
-              value?.toString() ?? '-',
+              value?. toString() ?? '-',
               overflow: TextOverflow.ellipsis,
             ),
           ),
