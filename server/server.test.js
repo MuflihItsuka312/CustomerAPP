@@ -4,16 +4,18 @@
  * These tests verify the token rotation and history logic without requiring MongoDB.
  */
 
-describe("One-Time Token System - Unit Tests", () => {
-  // Helper function (same as in server.js)
-  function randomToken(prefix) {
-    return `${prefix}-${Math.random().toString(36).slice(2, 8)}`;
-  }
+const crypto = require("crypto");
 
+// This is the exact implementation from server.js for testing consistency
+function randomToken(prefix) {
+  return `${prefix}-${crypto.randomBytes(6).toString("hex")}`;
+}
+
+describe("One-Time Token System - Unit Tests", () => {
   describe("randomToken function", () => {
     it("should generate token with given prefix", () => {
       const token = randomToken("LK-locker01");
-      expect(token).toMatch(/^LK-locker01-/);
+      expect(token).toMatch(/^LK-locker01-[a-f0-9]{12}$/);
     });
 
     it("should generate unique tokens", () => {
@@ -21,8 +23,16 @@ describe("One-Time Token System - Unit Tests", () => {
       for (let i = 0; i < 100; i++) {
         tokens.add(randomToken("LK-test"));
       }
-      // Should have many unique tokens (allowing some collisions)
-      expect(tokens.size).toBeGreaterThan(90);
+      // All tokens should be unique (cryptographically secure)
+      expect(tokens.size).toBe(100);
+    });
+
+    it("should generate cryptographically secure 12-char hex suffix", () => {
+      const token = randomToken("TEST");
+      const parts = token.split("-");
+      const suffix = parts[parts.length - 1];
+      // 6 bytes = 12 hex characters
+      expect(suffix).toMatch(/^[a-f0-9]{12}$/);
     });
   });
 

@@ -1,6 +1,7 @@
 // server.js - Smart Locker Backend + Mongoose + Auth Customer
 // Implements One-Time Token System for Locker Access
 require("dotenv").config();
+const crypto = require("crypto");
 const express = require("express");
 const cors = require("cors");
 const axios = require("axios");
@@ -211,9 +212,9 @@ const Courier = model("Courier", courierSchema);
 // HELPERS
 // ==================================================
 
-// Helper: generate random token
+// Helper: generate cryptographically secure random token
 function randomToken(prefix) {
-  return `${prefix}-${Math.random().toString(36).slice(2, 8)}`;
+  return `${prefix}-${crypto.randomBytes(6).toString("hex")}`;
 }
 
 // Helper: generate 6-digit customerId (userId)
@@ -237,7 +238,7 @@ async function getLocker(lockerId) {
   if (!locker) {
     locker = await Locker.create({
       lockerId,
-      lockerToken: `LK-${lockerId}-${Math.random().toString(36).slice(2, 8)}`,
+      lockerToken: randomToken(`LK-${lockerId}`),
       pendingResi: [],
       pendingShipments: [],
       courierHistory: [],
@@ -1073,10 +1074,10 @@ app.post("/api/courier/deposit-token", async (req, res) => {
 
     // Validasi lockerToken (QR dari ESP32)
     if (!locker.lockerToken || locker.lockerToken !== lockerToken.trim()) {
-      console.log(`[TOKEN VALIDATE] ${lockerId}: Token tidak valid. Expected: ${locker.lockerToken}, Got: ${lockerToken.trim()}`);
+      console.log(`[TOKEN VALIDATE] ${lockerId}: Token validation failed`);
       return res
         .status(400)
-        .json({ error: "Token tidak valid / kadaluarsa" });
+        .json({ error: "Invalid or expired token" });
     }
 
     // Cari pending shipment di pool baru
@@ -1154,7 +1155,7 @@ app.post("/api/courier/deposit-token", async (req, res) => {
 
     await locker.save();
 
-    console.log(`[TOKEN ROTATE] ${lockerId}: Old token invalidated (${oldToken}), new token: ${locker.lockerToken}`);
+    console.log(`[TOKEN ROTATE] ${lockerId}: Token rotated successfully`);
 
     // Optional: recalc courier state
     if (shipment.courierId) {
