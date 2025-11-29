@@ -1,5 +1,6 @@
 import 'dart:async';
 import 'dart:convert';
+import 'package:flutter/foundation.dart';
 import 'package:flutter/material.dart';
 import 'package:shared_preferences/shared_preferences.dart';
 import '../models/notification.dart';
@@ -9,6 +10,9 @@ import 'api_client.dart';
 class NotificationService {
   static const String _notificationsKey = 'notifications';
   static const String _fcmTokenKey = 'fcm_token';
+  
+  /// Maximum number of notifications to keep in history
+  static const int maxNotificationHistory = 100;
   
   // Stream controller for notification updates
   static final StreamController<List<AppNotification>> _notificationController =
@@ -37,6 +41,7 @@ class NotificationService {
         _notificationController.add(_notifications);
       }
     } catch (e) {
+      debugPrint('NotificationService: Failed to load notifications from storage: $e');
       _notifications = [];
     }
   }
@@ -48,7 +53,7 @@ class NotificationService {
       final jsonList = _notifications.map((n) => n.toJson()).toList();
       await prefs.setString(_notificationsKey, jsonEncode(jsonList));
     } catch (e) {
-      // Handle storage error silently
+      debugPrint('NotificationService: Failed to save notifications to storage: $e');
     }
   }
 
@@ -66,9 +71,9 @@ class NotificationService {
   static Future<void> addNotification(AppNotification notification) async {
     _notifications.insert(0, notification);
     
-    // Keep only last 100 notifications
-    if (_notifications.length > 100) {
-      _notifications = _notifications.take(100).toList();
+    // Keep only last maxNotificationHistory notifications
+    if (_notifications.length > maxNotificationHistory) {
+      _notifications = _notifications.take(maxNotificationHistory).toList();
     }
     
     _notificationController.add(_notifications);

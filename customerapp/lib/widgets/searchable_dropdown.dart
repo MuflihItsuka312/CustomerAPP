@@ -38,6 +38,9 @@ class SearchableDropdown<T> extends StatefulWidget {
   
   /// Maximum suggestions to show
   final int maxSuggestions;
+  
+  /// Maximum height of the dropdown overlay
+  final double maxDropdownHeight;
 
   const SearchableDropdown({
     super.key,
@@ -53,6 +56,7 @@ class SearchableDropdown<T> extends StatefulWidget {
     this.prefixIcon,
     this.keyboardType,
     this.maxSuggestions = 5,
+    this.maxDropdownHeight = 200,
   });
 
   @override
@@ -158,7 +162,7 @@ class _SearchableDropdownState<T> extends State<SearchableDropdown<T>> {
             borderRadius: BorderRadius.circular(8),
             child: ConstrainedBox(
               constraints: BoxConstraints(
-                maxHeight: 200,
+                maxHeight: widget.maxDropdownHeight,
               ),
               child: _filteredItems.isEmpty
                   ? Padding(

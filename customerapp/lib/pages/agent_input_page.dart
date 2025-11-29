@@ -88,14 +88,19 @@ class _AgentInputPageState extends State<AgentInputPage> {
     }
   }
 
+  /// Pattern for validating 6-digit customer ID
+  static final RegExp _customerIdPattern = RegExp(r'^\d{6}$');
+  
+  /// Error message for invalid customer ID format
+  static const String _customerIdFormatError = 'Customer ID must be 6 digits';
+
   /// Validate 6-digit customer ID format
   String? _validateCustomerId(String? value) {
     if (value == null || value.isEmpty) {
       return 'Customer ID is required';
     }
-    // Allow 6-digit format validation
-    if (!RegExp(r'^\d{6}$').hasMatch(value)) {
-      return 'Customer ID must be 6 digits';
+    if (!_customerIdPattern.hasMatch(value)) {
+      return _customerIdFormatError;
     }
     return null;
   }

@@ -4,6 +4,10 @@ import 'api_client.dart';
 
 /// Service for handling load cell detection from ESP32 devices
 class LoadCellService {
+  /// Default weight threshold in kilograms (kg) for detecting if locker has package
+  /// Values below this threshold are considered "empty"
+  static const double defaultWeightThresholdKg = 0.1;
+
   /// Get current load cell reading for a specific locker
   static Future<LoadCellReading?> getReading(String lockerId) async {
     try {
@@ -80,18 +84,23 @@ class LoadCellService {
   }
 
   /// Get the current status based on weight reading
-  static LoadCellStatus determineStatus(double weight, {double threshold = 0.1}) {
-    if (weight < threshold) {
+  /// [weight] - Weight in kilograms (kg)
+  /// [threshold] - Threshold in kg, defaults to [defaultWeightThresholdKg]
+  static LoadCellStatus determineStatus(double weight, {double? threshold}) {
+    final weightThreshold = threshold ?? defaultWeightThresholdKg;
+    if (weight < weightThreshold) {
       return LoadCellStatus.empty;
     }
     return LoadCellStatus.loaded;
   }
 
   /// Check if locker has package based on load cell reading
-  static Future<bool> hasPackage(String lockerId, {double threshold = 0.1}) async {
+  /// [threshold] - Weight threshold in kg, defaults to [defaultWeightThresholdKg]
+  static Future<bool> hasPackage(String lockerId, {double? threshold}) async {
     final reading = await getReading(lockerId);
     if (reading == null) return false;
-    return reading.weight >= threshold;
+    final weightThreshold = threshold ?? defaultWeightThresholdKg;
+    return reading.weight >= weightThreshold;
   }
 
   /// Get load cell status for multiple lockers
