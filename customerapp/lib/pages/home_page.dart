@@ -1,8 +1,11 @@
+import 'dart:async';
 import 'dart:convert';
 import 'package:flutter/material.dart';
 import '../services/api_client.dart';
+import '../services/notification_service.dart';
 import 'delivery_page.dart';
 import 'login_page.dart';
+import 'notifications_page.dart';
 
 class MainTabPage extends StatefulWidget {
   const MainTabPage({super.key});
@@ -13,12 +16,42 @@ class MainTabPage extends StatefulWidget {
 
 class _MainTabPageState extends State<MainTabPage> {
   int _index = 0;
+  int _notificationCount = 0;
+  StreamSubscription<List>? _notificationSubscription;
+
+  @override
+  void initState() {
+    super.initState();
+    _initializeNotifications();
+  }
+
+  @override
+  void dispose() {
+    _notificationSubscription?.cancel();
+    super.dispose();
+  }
+
+  Future<void> _initializeNotifications() async {
+    await NotificationService.initialize();
+    setState(() {
+      _notificationCount = NotificationService.getUnreadCount();
+    });
+    
+    _notificationSubscription = NotificationService.notificationStream.listen((notifications) {
+      if (mounted) {
+        setState(() {
+          _notificationCount = notifications.where((n) => !n.isRead).length;
+        });
+      }
+    });
+  }
 
   @override
   Widget build(BuildContext context) {
     final pages = [
       const HomePage(),
       const DeliveryPage(),
+      const NotificationsPage(),
     ];
 
     return Scaffold(
@@ -26,14 +59,21 @@ class _MainTabPageState extends State<MainTabPage> {
       bottomNavigationBar: BottomNavigationBar(
         currentIndex: _index,
         onTap: (i) => setState(() => _index = i),
-        items: const [
-          BottomNavigationBarItem(
-            icon: Icon(Icons. lock_open_outlined),
+        items: [
+          const BottomNavigationBarItem(
+            icon: Icon(Icons.lock_open_outlined),
             label: 'Home',
           ),
-          BottomNavigationBarItem(
+          const BottomNavigationBarItem(
             icon: Icon(Icons.list_alt),
             label: 'Delivery',
+          ),
+          BottomNavigationBarItem(
+            icon: NotificationBadge(
+              count: _notificationCount,
+              child: const Icon(Icons.notifications_outlined),
+            ),
+            label: 'Notifications',
           ),
         ],
       ),
@@ -159,6 +199,16 @@ class _HomePageState extends State<HomePage> {
         setState(() {
           _message = successMsg;
         });
+        
+        // Trigger notification for locker opened event
+        if (isOpening) {
+          final lockerId = _latestShipment!['lockerId']?.toString() ?? '';
+          await NotificationService.notifyLockerOpened(
+            lockerId: lockerId,
+            customerId: _latestShipment!['customerId']?.toString(),
+            customerName: _userName,
+          );
+        }
         
         ScaffoldMessenger.of(context).showSnackBar(
           SnackBar(

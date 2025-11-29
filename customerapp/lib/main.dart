@@ -1,9 +1,15 @@
 import 'package:flutter/material.dart';
 import 'services/api_client.dart';
+import 'services/notification_service.dart';
 import 'pages/login_page.dart';
 import 'pages/home_page.dart';
 
-void main() {
+void main() async {
+  WidgetsFlutterBinding.ensureInitialized();
+  
+  // Initialize notification service
+  await NotificationService.initialize();
+  
   runApp(const SmartLockerApp());
 }
 
