@@ -40,34 +40,55 @@ class _TrackingDetailPageState extends State<TrackingDetailPage> {
     });
 
     try {
-      final uri = Uri.parse(
-          '$backendBaseUrl/api/customer/track/${widget.resi}?courier=${widget.courierType}');
+      // ✅ REMOVED courier query param - backend auto-detects now
+      final uri = Uri.parse('$backendBaseUrl/api/customer/track/${widget.resi}');
+      
+      print('[TRACKING] Fetching: $uri');
+      
       final resp = await http.get(uri);
+      
+      print('[TRACKING] Status: ${resp.statusCode}');
+      print('[TRACKING] Body: ${resp.body}');
 
       if (resp.statusCode == 200) {
         final data = jsonDecode(resp.body);
 
-        final binder = data['binderbyte'];
-        final binderData = binder?['data'];
-
-        setState(() {
-          _summary = binderData?['summary'] as Map<String, dynamic>?;
-          _detail = binderData?['detail'] as Map<String, dynamic>?;
-          _history = (binderData?['history'] as List?) ?? [];
-        });
+        // ✅ FIXED: Access binderbyte directly
+        final binderbyte = data['binderbyte'];
+        
+        if (binderbyte != null) {
+          setState(() {
+            _summary = binderbyte['summary'] as Map<String, dynamic>?;
+            _detail = binderbyte['detail'] as Map<String, dynamic>?;
+            _history = (binderbyte['history'] as List?) ?? [];
+            _loading = false;
+          });
+          
+          print('[TRACKING] ✅ Loaded ${_history.length} history items');
+        } else {
+          setState(() {
+            _error = 'Tracking dari ekspedisi belum tersedia';
+            _loading = false;
+          });
+          
+          print('[TRACKING] ⚠️ No binderbyte data');
+        }
       } else {
+        final errorData = jsonDecode(resp.body);
         setState(() {
-          _error = 'Gagal load tracking (${resp.statusCode})';
+          _error = errorData['error'] ?? 'Gagal load tracking (${resp.statusCode})';
+          _loading = false;
         });
+        
+        print('[TRACKING] ❌ Error: $_error');
       }
     } catch (e) {
       setState(() {
         _error = 'Error koneksi: $e';
-      });
-    } finally {
-      setState(() {
         _loading = false;
       });
+      
+      print('[TRACKING] ❌ Exception: $e');
     }
   }
 

@@ -102,16 +102,20 @@ class CustomerApi {
     return jsonDecode(resp.body);
   }
 
-  // DETAIL TRACKING (gabungan internal + Binderbyte)
+  // DETAIL TRACKING (backend auto-detects courier)
   Future<Map<String, dynamic>> trackResi({
     required String resi,
-    required String courier,
   }) async {
-    final url = Uri.parse('$baseUrl/api/customer/track/$resi?courier=$courier');
+    // ✅ REMOVED courier query param - backend auto-detects now
+    final url = Uri.parse('$baseUrl/api/customer/track/$resi');
     final resp = await http.get(
       url,
-      headers: _headers(withAuth: false), // kalau mau bisa tanpa auth
+      headers: _headers(withAuth: false),
     );
+    
+    print('[API] trackResi response: ${resp.statusCode}');
+    print('[API] trackResi body: ${resp.body}');
+    
     return jsonDecode(resp.body);
   }
 }

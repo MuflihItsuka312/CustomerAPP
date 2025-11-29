@@ -121,16 +121,26 @@ class _HomePageState extends State<HomePage> {
     }
   }
 
-  Future<void> _openLocker() async {
+  Future<void> _toggleLocker() async {
     if (_latestShipment == null) return;
 
     final resi = _latestShipment!['resi'];
     final courierType = _latestShipment!['courierType'];
+    final currentStatus = _latestShipment!['lockerStatus'] ?? 'closed';
+    
+    // Determine action: if locker is open, close it; if closed, open it
+    final isOpening = currentStatus == 'closed';
+    final endpoint = isOpening ? '/api/customer/open-locker' : '/api/customer/close-locker';
+    final actionText = isOpening ? 'membuka' : 'menutup';
 
-    setState(() => _loading = true);
+    setState(() {
+      _loading = true;
+      _message = null;
+    });
+
     try {
-      final resp = await ApiClient. post(
-        '/api/customer/open-locker',
+      final resp = await ApiClient.post(
+        endpoint,
         {
           'resi': resi,
           'courierType': courierType,
@@ -138,22 +148,54 @@ class _HomePageState extends State<HomePage> {
         auth: true,
       );
 
-      final data = jsonDecode(resp. body);
+      final data = jsonDecode(resp.body);
 
-      if (resp. statusCode == 200) {
+      if (!mounted) return;
+
+      if (resp.statusCode == 200) {
+        final successMsg = data['message']?.toString() ??
+            'Loker berhasil ${isOpening ? "dibuka" : "ditutup"}!';
+        
         setState(() {
-          _message = data['message']?. toString() ??
-              'Permintaan buka loker dikirim.';
+          _message = successMsg;
         });
+        
+        ScaffoldMessenger.of(context).showSnackBar(
+          SnackBar(
+            content: Text(successMsg),
+            backgroundColor: Colors.green,
+          ),
+        );
+        
+        // Refresh shipment data to get updated locker status
+        await _fetchShipments();
       } else {
+        final errorMsg = data['error']?.toString() ?? 'Gagal $actionText loker.';
         setState(() {
-          _message = data['error']?.toString() ?? 'Gagal buka loker.';
+          _message = errorMsg;
         });
+        
+        ScaffoldMessenger.of(context).showSnackBar(
+          SnackBar(
+            content: Text(errorMsg),
+            backgroundColor: Colors.red,
+          ),
+        );
       }
     } catch (e) {
-      setState(() => _message = 'Error koneksi saat buka loker.');
+      if (!mounted) return;
+      setState(() => _message = 'Error koneksi saat $actionText loker.');
+      
+      ScaffoldMessenger.of(context).showSnackBar(
+        SnackBar(
+          content: Text('Tidak dapat terhubung ke server'),
+          backgroundColor: Colors.red,
+        ),
+      );
     } finally {
-      if (mounted) setState(() => _loading = false);
+      if (mounted) {
+        setState(() => _loading = false);
+      }
     }
   }
 
@@ -335,36 +377,51 @@ class _HomePageState extends State<HomePage> {
               Expanded(
                 child: Center(
                   child: GestureDetector(
-                    onTap: (_loading || shipment == null) ? null : _openLocker,
-                    child: Container(
-                      width: 180,
-                      height: 180,
-                      decoration: BoxDecoration(
-                        shape: BoxShape.circle,
-                        gradient: const LinearGradient(
-                          colors: [Colors.white, Color(0xFFEDEFF5)],
-                          begin: Alignment.topLeft,
-                          end: Alignment.bottomRight,
-                        ),
-                        boxShadow: const [
-                          BoxShadow(
-                            color: Colors. black12,
-                            blurRadius: 16,
-                            offset: Offset(0, 8),
+                    onTap: shipment == null ? null : _toggleLocker,
+                    child: AnimatedOpacity(
+                      opacity: shipment == null ? 0.5 : 1.0,
+                      duration: const Duration(milliseconds: 200),
+                      child: Container(
+                        width: 180,
+                        height: 180,
+                        decoration: BoxDecoration(
+                          shape: BoxShape.circle,
+                          gradient: LinearGradient(
+                            colors: _loading
+                                ? [Colors.grey.shade300, Colors.grey.shade400]
+                                : shipment == null
+                                    ? [Colors.grey.shade200, Colors.grey.shade300]
+                                    : (shipment['lockerStatus'] == 'open')
+                                        ? [Colors.green.shade100, Colors.green.shade200]
+                                        : [Colors.white, const Color(0xFFEDEFF5)],
+                            begin: Alignment.topLeft,
+                            end: Alignment.bottomRight,
                           ),
-                        ],
-                      ),
-                      alignment: Alignment.center,
-                      child: _loading
-                          ? const CircularProgressIndicator()
-                          : const Text(
-                              'OPEN',
-                              style: TextStyle(
-                                fontSize: 24,
-                                letterSpacing: 2,
-                                fontWeight: FontWeight.bold,
-                              ),
+                          boxShadow: [
+                            BoxShadow(
+                              color: Colors.black12,
+                              blurRadius: 16,
+                              offset: const Offset(0, 8),
                             ),
+                          ],
+                        ),
+                        alignment: Alignment.center,
+                        child: _loading
+                            ? const CircularProgressIndicator()
+                            : Text(
+                                (shipment?['lockerStatus'] == 'open') ? 'CLOSE' : 'OPEN',
+                                style: TextStyle(
+                                  fontSize: 24,
+                                  letterSpacing: 2,
+                                  fontWeight: FontWeight.bold,
+                                  color: shipment == null
+                                      ? Colors.grey.shade500
+                                      : (shipment['lockerStatus'] == 'open')
+                                          ? Colors.green.shade700
+                                          : Colors.black,
+                                ),
+                              ),
+                      ),
                     ),
                   ),
                 ),
