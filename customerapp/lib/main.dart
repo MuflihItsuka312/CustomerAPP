@@ -1,9 +1,27 @@
 import 'package:flutter/material.dart';
+import 'package:firebase_core/firebase_core.dart';
 import 'services/api_client.dart';
+import 'services/notification_service.dart';
 import 'pages/login_page.dart';
 import 'pages/home_page.dart';
 
-void main() {
+void main() async {
+  WidgetsFlutterBinding.ensureInitialized();
+  
+  // Initialize Firebase (with error handling)
+  try {
+    await Firebase.initializeApp();
+    print('[FIREBASE] Initialized successfully');
+    
+    // Initialize Notification Service only if Firebase initialized
+    await NotificationService().initialize();
+    print('[NOTIFICATION] Service initialized');
+  } catch (e) {
+    print('[FIREBASE] Initialization failed: $e');
+    print('[NOTIFICATION] Skipping notification service initialization');
+    // Continue without Firebase - app will work without notifications
+  }
+  
   runApp(const SmartLockerApp());
 }
 
@@ -13,7 +31,7 @@ class SmartLockerApp extends StatelessWidget {
   @override
   Widget build(BuildContext context) {
     return MaterialApp(
-      title: 'Smart Locker',
+      title: 'Customer Revisi 3',
       debugShowCheckedModeBanner: false,
       theme: ThemeData(
         colorSchemeSeed: Colors.blue,

@@ -1,6 +1,8 @@
 import 'dart:convert';
 import 'package:flutter/material.dart';
 import '../services/api_client.dart';
+import '../services/notification_service.dart';
+import '../services/load_cell_monitor_service.dart';
 import 'delivery_page.dart';
 import 'login_page.dart';
 
@@ -62,11 +64,18 @@ class _HomePageState extends State<HomePage> {
     super.initState();
     _loadUser();
     _fetchShipments();
+    
+    // Start monitoring load cell changes
+    LoadCellMonitorService().startMonitoring();
   }
 
   @override
   void dispose() {
     _resiController.dispose();
+    
+    // Stop monitoring when page is disposed
+    LoadCellMonitorService().stopMonitoring();
+    
     super.dispose();
   }
 
@@ -126,6 +135,7 @@ class _HomePageState extends State<HomePage> {
 
     final resi = _latestShipment!['resi'];
     final courierType = _latestShipment!['courierType'];
+    final lockerId = _latestShipment!['lockerId'] ?? 'Unknown';
     final currentStatus = _latestShipment!['lockerStatus'] ?? 'closed';
     
     // Determine action: if locker is open, close it; if closed, open it
@@ -154,11 +164,24 @@ class _HomePageState extends State<HomePage> {
 
       if (resp.statusCode == 200) {
         final successMsg = data['message']?.toString() ??
-            'Loker berhasil ${isOpening ? "dibuka" : "ditutup"}!';
+            'Loker berhasil ${isOpening ? "dibuka" : "ditutup"}';
         
         setState(() {
           _message = successMsg;
         });
+        
+        // Send notification
+        if (isOpening) {
+          await NotificationService().showLockerOpenedNotification(
+            resi: resi,
+            lockerId: lockerId,
+          );
+        } else {
+          await NotificationService().showLockerClosedNotification(
+            resi: resi,
+            lockerId: lockerId,
+          );
+        }
         
         ScaffoldMessenger.of(context).showSnackBar(
           SnackBar(

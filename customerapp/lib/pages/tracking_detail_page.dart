@@ -3,7 +3,7 @@ import 'package:flutter/material.dart';
 import 'package:http/http.dart' as http;
 
 // sesuaikan alamat backend
-const String backendBaseUrl = 'http://10.0.2.2:3000';
+const String backendBaseUrl = 'https://serverr.shidou.cloud';
 
 class TrackingDetailPage extends StatefulWidget {
   final String resi;
